@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>どこでもコプター - 大空を飛び回る</title>
+<link rel="icon" href="favicon-32.png" sizes="32x32">
+<link href="https://unpkg.com/cesium@1.144.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<script src="https://unpkg.com/cesium@1.144.0/Build/Cesium/Cesium.js"></script>
+<style>
+  :root{
+    --bg:#05070d;
+    --panel:#0e1420ee;
+    --panel-border:#26314599;
+    --accent:#3fd0ff;
+    --accent2:#ff5f6d;
+    --text:#e7edf5;
+    --text-dim:#8a97ab;
+    --good:#3fe08a;
+    --warn:#ffb648;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;color:var(--text);
+    -webkit-user-select:none;user-select:none;touch-action:none;}
+  #cesiumContainer{position:absolute;inset:0;}
+  .cesium-widget-credits{opacity:.5;transform:scale(.85);transform-origin:bottom left;}
+
+  /* ---------- HUD ---------- */
+  #hud{position:absolute;inset:0;pointer-events:none;display:none;}
+  #hud.active{display:block;}
+  #crosshair{position:absolute;top:50%;left:50%;width:22px;height:22px;margin:-11px 0 0 -11px;
+    border:2px solid #ffffffaa;border-radius:50%;}
+  #crosshair::after{content:"";position:absolute;top:50%;left:50%;width:4px;height:4px;margin:-2px 0 0 -2px;
+    background:var(--accent);border-radius:50%;}
+  #statsPanel{position:absolute;top:14px;left:14px;background:var(--panel);border:1px solid var(--panel-border);
+    border-radius:12px;padding:10px 16px;font-size:13px;line-height:1.9;min-width:150px;backdrop-filter:blur(6px);}
+  #statsPanel .row{display:flex;justify-content:space-between;gap:14px;}
+  #statsPanel .label{color:var(--text-dim);}
+  #statsPanel .val{font-variant-numeric:tabular-nums;font-weight:600;letter-spacing:.5px;}
+  #altVal.warn{color:var(--warn);}
+  #compassWrap{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:260px;height:34px;
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;overflow:hidden;backdrop-filter:blur(6px);}
+  #compassStrip{position:absolute;top:0;left:50%;height:100%;display:flex;align-items:center;
+    font-size:12px;color:var(--text-dim);white-space:nowrap;will-change:transform;}
+  #compassStrip span{display:inline-block;width:26px;text-align:center;}
+  #compassStrip span.major{color:var(--accent);font-weight:700;}
+  #compassCenterMark{position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--accent2);}
+  #landBtn{position:absolute;top:56px;right:14px;pointer-events:auto;}
+
+  #throttlePanel{position:absolute;right:14px;top:50%;transform:translateY(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:auto;}
+  #throttleLabel,#throttleValue{font-size:11px;color:var(--text-dim);background:var(--panel);
+    padding:3px 9px;border-radius:7px;border:1px solid var(--panel-border);white-space:nowrap;}
+  #throttleValue{color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums;}
+  #throttleSliderWrap{position:relative;width:40px;height:200px;}
+  #throttleSlider{position:absolute;top:50%;left:50%;width:200px;height:8px;margin:0;
+    transform:translate(-50%,-50%) rotate(-90deg);-webkit-appearance:none;appearance:none;
+    background:#263145;border-radius:8px;outline:none;}
+  #throttleSlider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;
+    border-radius:50%;background:var(--accent);border:3px solid #001622;cursor:pointer;box-shadow:0 2px 8px #000a;}
+  #throttleSlider::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:var(--accent);
+    border:3px solid #001622;cursor:pointer;box-shadow:0 2px 8px #000a;}
+  #throttleSlider::-moz-range-track{height:8px;background:#263145;border-radius:8px;}
+
+  /* ---------- Panels (shared) ---------- */
+  .panel{position:absolute;pointer-events:auto;background:var(--panel);border:1px solid var(--panel-border);
+    border-radius:16px;backdrop-filter:blur(8px);box-shadow:0 12px 40px #000a;}
+  #startPanel{left:50%;bottom:22px;transform:translateX(-50%);width:min(94vw,460px);
+    padding:16px 18px 18px;max-height:78vh;overflow-y:auto;}
+  #startPanel h1{font-size:16px;margin:0 0 4px;letter-spacing:.5px;}
+  #startPanel .sub{font-size:12px;color:var(--text-dim);margin:0 0 12px;}
+  .section-label{font-size:11px;color:var(--text-dim);margin:14px 0 6px;text-transform:uppercase;letter-spacing:1px;}
+  #locGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+  .locBtn{background:#141c2b;border:1px solid #263349;color:var(--text);border-radius:10px;
+    padding:8px 4px;font-size:12px;cursor:pointer;}
+  .locBtn:active,.locBtn.selected{background:var(--accent);color:#001820;border-color:var(--accent);}
+  #searchRow{display:flex;gap:6px;margin-top:6px;}
+  #searchInput{flex:1;background:#141c2b;border:1px solid #263349;color:var(--text);border-radius:10px;
+    padding:9px 10px;font-size:13px;min-width:0;}
+  .btn{background:#141c2b;border:1px solid #263349;color:var(--text);border-radius:10px;
+    padding:9px 14px;font-size:13px;cursor:pointer;white-space:nowrap;}
+  .btn:active{opacity:.7;}
+  #searchResults{margin-top:6px;display:flex;flex-direction:column;gap:4px;max-height:120px;overflow-y:auto;}
+  .searchItem{background:#0e1521;border:1px solid #1e2b3f;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;}
+  .searchItem:active{background:#1a2436;}
+
+  .toggleRow{display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:10px;}
+  .switch{position:relative;width:44px;height:24px;flex:none;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;inset:0;background:#263145;border-radius:24px;cursor:pointer;transition:.2s;}
+  .slider::before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;
+    border-radius:50%;transition:.2s;}
+  .switch input:checked + .slider{background:var(--accent);}
+  .switch input:checked + .slider::before{transform:translateX(20px);}
+  #googleKeyInput{width:100%;margin-top:8px;background:#141c2b;border:1px solid #263349;color:var(--text);
+    border-radius:10px;padding:9px 10px;font-size:12px;display:none;}
+  #googleKeyInput.show{display:block;}
+  #googleStatus{font-size:11px;color:var(--text-dim);margin-top:6px;min-height:14px;}
+  #googleStatus.err{color:var(--accent2);}
+  #googleStatus.ok{color:var(--good);}
+  #googleHelp{font-size:11px;color:var(--text-dim);margin-top:4px;line-height:1.6;display:none;}
+  #googleHelp.show{display:block;}
+  #googleHelp a{color:var(--accent);}
+
+  #takeoffBtn{width:100%;margin-top:16px;background:linear-gradient(135deg,var(--accent),#2196e0);
+    color:#001622;font-weight:700;font-size:15px;border:none;border-radius:12px;padding:14px;cursor:pointer;
+    letter-spacing:.5px;}
+  #takeoffBtn:active{filter:brightness(.9);}
+  #helpToggleRow{display:flex;justify-content:center;margin-top:10px;}
+  #helpToggleRow button{background:none;border:none;color:var(--text-dim);font-size:11px;text-decoration:underline;cursor:pointer;}
+
+  /* ---------- Help modal ---------- */
+  #helpModal{position:absolute;inset:0;background:#000a;display:none;align-items:center;justify-content:center;
+    pointer-events:auto;z-index:20;}
+  #helpModal.show{display:flex;}
+  #helpBox{width:min(92vw,420px);max-height:80vh;overflow-y:auto;padding:18px 20px;}
+  #helpBox h2{font-size:15px;margin:0 0 10px;}
+  #helpBox .keyRow{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid #1e2b3f;}
+  #helpBox kbd{background:#1a2436;border:1px solid #2c3b52;border-radius:5px;padding:2px 7px;font-size:12px;}
+  #helpCloseBtn{width:100%;margin-top:14px;}
+
+  /* ---------- Touch controls ---------- */
+  #touchControls{position:absolute;inset:0;display:none;pointer-events:none;}
+  #touchControls.active{display:block;}
+  #throttleCol{position:absolute;right:16px;bottom:26px;display:flex;flex-direction:column;gap:10px;pointer-events:auto;}
+  #rollCol{position:absolute;left:16px;bottom:26px;display:flex;gap:10px;pointer-events:auto;}
+  .tbtn{width:58px;height:58px;border-radius:50%;background:var(--panel);border:1px solid var(--panel-border);
+    color:var(--text);font-size:20px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
+  .tbtn:active{background:var(--accent);color:#001622;}
+  #lookPad{position:absolute;inset:0;pointer-events:auto;}
+  #brakeBtn{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);pointer-events:auto;}
+
+  #flashOverlay{position:absolute;inset:0;background:var(--accent2);opacity:0;pointer-events:none;transition:opacity .08s;}
+
+  #fileWarning{position:absolute;top:0;left:0;right:0;z-index:30;background:#4a1f0aee;border-bottom:1px solid #ff8a4088;
+    color:#ffe1c2;font-size:12.5px;line-height:1.7;padding:10px 14px;display:none;backdrop-filter:blur(6px);}
+  #fileWarning.show{display:block;}
+  #fileWarning b{color:#ffb648;}
+  #fatalError{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:#000c;}
+  #fatalError.show{display:flex;}
+  #fatalErrorBox{max-width:min(90vw,480px);background:#1a0e0eee;border:1px solid #ff5f6d88;border-radius:14px;
+    padding:18px 20px;font-size:12.5px;line-height:1.8;color:#ffdada;}
+  #fatalErrorBox b{color:#ff8a8a;}
+  #fatalErrorBox pre{white-space:pre-wrap;word-break:break-all;background:#000000aa;border-radius:8px;padding:8px;
+    margin-top:8px;font-size:11px;color:#ffb0b0;max-height:160px;overflow-y:auto;}
+
+  @media (min-width:760px){
+    #touchControls{display:none !important;}
+  }
+</style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div id="flashOverlay"></div>
+  <div id="fileWarning">
+    ⚠️ <b>このファイルを直接ダブルクリックで開いています。</b>
+    ブラウザのセキュリティ制限により地図が正しく表示されない場合があります。
+    同じフォルダ内の <b>「起動.bat」</b> をダブルクリックして開き直してください。
+  </div>
+  <div id="fatalError">
+    <div id="fatalErrorBox">
+      <b>地球儀の読み込みに失敗しました。</b><br>
+      インターネット接続を確認するか、同じフォルダの「起動.bat」から開き直してください。
+      <pre id="fatalErrorMsg"></pre>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="statsPanel">
+      <div class="row"><span class="label">高度</span><span class="val" id="altVal">0 m</span></div>
+      <div class="row"><span class="label">速度</span><span class="val" id="spdVal">0 km/h</span></div>
+      <div class="row"><span class="label">場所</span><span class="val" id="locVal" style="font-size:11px;">-</span></div>
+    </div>
+    <div id="compassWrap">
+      <div id="compassCenterMark"></div>
+      <div id="compassStrip"></div>
+    </div>
+    <button class="btn" id="landBtn">🛬 着陸</button>
+    <div id="throttlePanel">
+      <div id="throttleLabel">スロットル</div>
+      <div id="throttleSliderWrap">
+        <input type="range" id="throttleSlider" min="0" max="2200" step="1" value="60">
+      </div>
+      <div id="throttleValue">216 km/h</div>
+    </div>
+  </div>
+
+  <!-- Touch controls -->
+  <div id="touchControls">
+    <div id="lookPad"></div>
+    <div id="rollCol">
+      <div class="tbtn" id="rollLeftBtn">⟲</div>
+      <div class="tbtn" id="rollRightBtn">⟳</div>
+    </div>
+    <div id="throttleCol">
+      <div class="tbtn" id="thrUpBtn">▲</div>
+      <div class="tbtn" id="thrDownBtn">▼</div>
+    </div>
+    <div class="tbtn" id="brakeBtn">🛑</div>
+  </div>
+
+  <!-- Start / config panel -->
+  <div id="startPanel" class="panel">
+    <h1>🚁 どこでもコプター</h1>
+    <p class="sub">大空を飛び回るフライト体験。行き先を選んでテイクオフ。</p>
+
+    <div class="section-label">行き先</div>
+    <div id="locGrid"></div>
+    <div id="searchRow">
+      <input id="searchInput" type="text" placeholder="場所を検索 (例: 京都)">
+      <button class="btn" id="searchBtn">検索</button>
+    </div>
+    <div id="searchResults"></div>
+
+    <div class="section-label">グラフィック</div>
+    <div class="toggleRow">
+      <div style="font-size:13px;">Google フォトリアル3D<br><span style="font-size:11px;color:var(--text-dim);">実写のような3D地形/建物</span></div>
+      <label class="switch"><input type="checkbox" id="googleToggle"><span class="slider"></span></label>
+    </div>
+    <input id="googleKeyInput" type="password" placeholder="Google Maps API キーを貼り付け">
+    <div id="googleStatus"></div>
+    <div id="googleHelp">
+      Google Cloud Console で「Map Tiles API」を有効化したAPIキーが必要です。無料枠あり(要クレジットカード登録)。<br>
+      キーはこの端末のブラウザ内(localStorage)にのみ保存され、外部送信はされません。<br>
+      キーが無い場合は無料の OpenStreetMap 地図でそのまま飛行できます。
+    </div>
+
+    <button id="takeoffBtn">✈️ テイクオフ</button>
+    <div id="helpToggleRow"><button id="showHelpBtn">操作方法を見る</button></div>
+  </div>
+
+  <!-- Help modal -->
+  <div id="helpModal">
+    <div id="helpBox" class="panel">
+      <h2>操作方法</h2>
+      <div class="keyRow"><span>スロットル 加速/減速</span><span><kbd>W</kbd> / <kbd>S</kbd></span></div>
+      <div class="keyRow"><span>スロットル 直接指定</span><span>右のスライダー / マウスホイール</span></div>
+      <div class="keyRow"><span>ピッチ(上下を向く)</span><span><kbd>↑</kbd> / <kbd>↓</kbd></span></div>
+      <div class="keyRow"><span>ヨー(左右に曲がる)</span><span><kbd>←</kbd> / <kbd>→</kbd></span></div>
+      <div class="keyRow"><span>ロール(機体を傾ける)</span><span><kbd>A</kbd> / <kbd>D</kbd></span></div>
+      <div class="keyRow"><span>ブースト</span><span><kbd>Shift</kbd></span></div>
+      <div class="keyRow"><span>ブレーキ</span><span><kbd>Space</kbd></span></div>
+      <div class="keyRow"><span>着陸(操縦終了)</span><span><kbd>Esc</kbd></span></div>
+      <div class="keyRow"><span>スマホ: 画面をドラッグ</span><span>視点操作</span></div>
+      <div class="keyRow" style="border-bottom:none;"><span>離陸前はマウスでドラッグ操作すると<br>Google Earthのように地球儀を見渡せます</span><span></span></div>
+      <button class="btn" id="helpCloseBtn">閉じる</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  var LOCATIONS = [
+    {name:"富士山",       lon:138.7274, lat:35.3606,  alt:3776},
+    {name:"東京タワー",   lon:139.7454, lat:35.6586,  alt:333},
+    {name:"エベレスト",   lon:86.9250,  lat:27.9881,  alt:8849},
+    {name:"グランドキャニオン", lon:-112.1129, lat:36.0544, alt:2100},
+    {name:"ニューヨーク", lon:-74.0060, lat:40.7128,  alt:50},
+    {name:"パリ",         lon:2.2945,   lat:48.8584,  alt:330},
+    {name:"ドバイ",       lon:55.2744,  lat:25.1972,  alt:20},
+    {name:"シドニー",     lon:151.2153, lat:-33.8688, alt:20},
+    {name:"グアム",       lon:144.7937, lat:13.4443,  alt:10}
+  ];
+
+  var GOOGLE_KEY_STORAGE = "sky-flight-earth-google-key-v1";
+
+  var state = {
+    selectedLoc: LOCATIONS[0],
+    flightMode: false,
+    speed: 0,
+    boost: false,
+    googleEnabled: false,
+    lastTime: null
+  };
+
+  var MAX_SPEED = 2200;       // m/s
+  var ACCEL = 55;             // m/s^2
+  var BRAKE_DECEL = 140;      // m/s^2
+  var BOOST_MULT = 2.6;
+  var LOOK_RATE = 0.105;      // rad/s, at REF_SPEED (1/10 of original for slower, gentler turning)
+  var ROLL_RATE = 0.17;       // rad/s, at REF_SPEED (1/10 of original for slower, gentler turning)
+  var REF_SPEED = 150;        // m/s - turn rate is 1x at this speed
+  var TURN_MUL_MIN = 0.35;    // slowest turning, near-stationary flight
+  var TURN_MUL_MAX = 3.0;     // fastest turning, near top speed
+  var MIN_ALT = 25;           // m above ellipsoid, safety floor
+  var TAKEOFF_ALT = 1600;     // m above target point
+
+  var viewer, googleTileset = null;
+  var keys = {};
+
+  // ---------- Audio (flight sound track) ----------
+  var FLIGHT_AUDIO_SRC = "魔法使いが空を飛ぶ.mp3";
+  var engineAudio = null, muted = false;
+  function ensureAudio(){
+    if(engineAudio) return;
+    try{
+      engineAudio = new Audio(FLIGHT_AUDIO_SRC);
+      engineAudio.loop = true;
+      engineAudio.volume = 0;
+      engineAudio.play().catch(function(){ /* blocked until user gesture, retried by caller */ });
+    }catch(e){ /* audio not available, ignore */ }
+  }
+  function updateAudio(speedRatio){
+    if(!engineAudio) return;
+    if(engineAudio.paused) engineAudio.play().catch(function(){});
+    engineAudio.volume = muted ? 0 : Math.min(1, 0.35 + speedRatio * 0.5);
+    engineAudio.playbackRate = Math.min(1.6, Math.max(0.7, 0.85 + speedRatio * 0.5));
+  }
+  function stopAudio(){
+    if(!engineAudio) return;
+    engineAudio.pause();
+    engineAudio.currentTime = 0;
+  }
+
+  // ---------- Viewer setup ----------
+  function initViewer(){
+    viewer = new Cesium.Viewer("cesiumContainer", {
+      baseLayerPicker: false,
+      geocoder: false,
+      homeButton: false,
+      sceneModePicker: false,
+      navigationHelpButton: false,
+      animation: false,
+      timeline: false,
+      fullscreenButton: false,
+      infoBox: false,
+      selectionIndicator: false,
+      terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+      baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({
+        url: "https://tile.openstreetmap.org/"
+      })),
+      contextOptions: { webgl: { alpha: false } },
+      requestRenderMode: false
+    });
+    viewer.scene.globe.depthTestAgainstTerrain = true;
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#1c3a52");
+    viewer.clock.shouldAnimate = false;
+    viewer.scene.postRender.addEventListener(onPostRender);
+    viewer._creditContainer && (viewer._creditContainer.style.display = "none");
+    lookAtLocation(state.selectedLoc, true);
+  }
+
+  function lookAtLocation(loc, instant){
+    var dest = Cesium.Cartesian3.fromDegrees(loc.lon, loc.lat, (loc.alt || 0) + 5500);
+    var orientation = { heading: 0, pitch: Cesium.Math.toRadians(-35), roll: 0 };
+    if(instant){
+      viewer.camera.setView({ destination: dest, orientation: orientation });
+    } else {
+      viewer.camera.flyTo({ destination: dest, orientation: orientation, duration: 2.2 });
+    }
+  }
+
+  // ---------- Google Photorealistic 3D Tiles ----------
+  function setGoogleStatus(msg, cls){
+    var el = document.getElementById("googleStatus");
+    el.textContent = msg || "";
+    el.className = cls || "";
+  }
+
+  function enableGoogleTiles(key){
+    setGoogleStatus("読み込み中...", "");
+    Cesium.createGooglePhotorealistic3DTileset({ key: key })
+      .then(function(tileset){
+        if(googleTileset){
+          viewer.scene.primitives.remove(googleTileset);
+        }
+        googleTileset = tileset;
+        viewer.scene.primitives.add(tileset);
+        viewer.scene.globe.show = false;
+        state.googleEnabled = true;
+        setGoogleStatus("Googleフォトリアル3Dを表示中", "ok");
+      })
+      .catch(function(err){
+        state.googleEnabled = false;
+        viewer.scene.globe.show = true;
+        console.error(err);
+        setGoogleStatus("読み込み失敗: APIキーやMap Tiles APIの有効化・課金設定を確認してください", "err");
+      });
+  }
+
+  function disableGoogleTiles(){
+    if(googleTileset){
+      viewer.scene.primitives.remove(googleTileset);
+      googleTileset = null;
+    }
+    viewer.scene.globe.show = true;
+    state.googleEnabled = false;
+    setGoogleStatus("", "");
+  }
+
+  // ---------- Flight control ----------
+  function startFlight(){
+    ensureAudio();
+    var loc = state.selectedLoc;
+    var dest = Cesium.Cartesian3.fromDegrees(loc.lon, loc.lat, TAKEOFF_ALT);
+    viewer.camera.setView({
+      destination: dest,
+      orientation: { heading: 0, pitch: 0, roll: 0 }
+    });
+    state.speed = 60;
+    state.flightMode = true;
+    viewer.scene.screenSpaceCameraController.enableInputs = false;
+    document.getElementById("startPanel").style.display = "none";
+    document.getElementById("hud").classList.add("active");
+    document.getElementById("locVal").textContent = state.selectedLoc.name;
+    if(isTouch) document.getElementById("touchControls").classList.add("active");
+  }
+
+  function endFlight(){
+    state.flightMode = false;
+    state.speed = 0;
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
+    document.getElementById("startPanel").style.display = "";
+    document.getElementById("hud").classList.remove("active");
+    document.getElementById("touchControls").classList.remove("active");
+    stopAudio();
+  }
+
+  function flashCrash(){
+    var el = document.getElementById("flashOverlay");
+    el.style.opacity = "0.45";
+    setTimeout(function(){ el.style.opacity = "0"; }, 90);
+  }
+
+  function onPostRender(){
+    if(!state.flightMode) return;
+    var now = performance.now();
+    if(state.lastTime === null) state.lastTime = now;
+    var dt = Math.min((now - state.lastTime) / 1000, 0.1);
+    state.lastTime = now;
+    if(dt <= 0) return;
+
+    var cam = viewer.camera;
+    var boostMul = (keys["ShiftLeft"] || keys["ShiftRight"]) ? BOOST_MULT : 1;
+
+    if(keys["KeyW"]) state.speed = Math.min(MAX_SPEED, state.speed + ACCEL * boostMul * dt);
+    if(keys["KeyS"]) state.speed = Math.max(0, state.speed - ACCEL * dt);
+    if(keys["Space"] || touchState.brake) state.speed = Math.max(0, state.speed - BRAKE_DECEL * dt);
+    if(touchState.thrUp) state.speed = Math.min(MAX_SPEED, state.speed + ACCEL * dt);
+    if(touchState.thrDown) state.speed = Math.max(0, state.speed - ACCEL * dt);
+    if(pendingThrottleSet !== null){
+      state.speed = pendingThrottleSet;
+      pendingThrottleSet = null;
+    }
+
+    // turning is more responsive at high speed, gentler when nearly stationary
+    var turnMul = Math.min(TURN_MUL_MAX, Math.max(TURN_MUL_MIN, state.speed / REF_SPEED));
+    var lookAmt = LOOK_RATE * turnMul * dt;
+    var rollAmt = ROLL_RATE * turnMul * dt;
+
+    if(keys["ArrowUp"]) cam.lookUp(lookAmt);
+    if(keys["ArrowDown"]) cam.lookDown(lookAmt);
+    if(keys["ArrowLeft"]) cam.lookLeft(lookAmt);
+    if(keys["ArrowRight"]) cam.lookRight(lookAmt);
+    if(keys["KeyA"]) cam.twistLeft(rollAmt);
+    if(keys["KeyD"]) cam.twistRight(rollAmt);
+
+    // touch look (direct drag-to-aim, kept speed-independent since it's positional not rate-based)
+    if(touchState.dx !== 0 || touchState.dy !== 0){
+      cam.lookRight(touchState.dx * 0.0028);
+      cam.lookDown(touchState.dy * 0.0028);
+      touchState.dx = 0; touchState.dy = 0;
+    }
+    if(touchState.rollLeft) cam.twistLeft(rollAmt);
+    if(touchState.rollRight) cam.twistRight(rollAmt);
+
+    cam.moveForward(state.speed * dt);
+
+    // ground safety clamp (flat ellipsoid floor)
+    var carto = Cesium.Cartographic.fromCartesian(cam.position);
+    if(carto.height < MIN_ALT){
+      var fixed = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, MIN_ALT);
+      cam.position = fixed;
+      if(state.speed > 40) flashCrash();
+      state.speed *= 0.35;
+    }
+
+    updateHud(carto.height, state.speed);
+    updateAudio(state.speed / MAX_SPEED);
+  }
+
+  function updateHud(height, speed){
+    var altEl = document.getElementById("altVal");
+    altEl.textContent = Math.round(height).toLocaleString() + " m";
+    altEl.className = height < MIN_ALT * 4 ? "val warn" : "val";
+    document.getElementById("spdVal").textContent = Math.round(speed * 3.6).toLocaleString() + " km/h";
+    document.getElementById("throttleValue").textContent = Math.round(speed * 3.6).toLocaleString() + " km/h";
+    if(!throttleDragging){
+      document.getElementById("throttleSlider").value = speed;
+    }
+
+    var heading = Cesium.Math.toDegrees(viewer.camera.heading);
+    heading = ((heading % 360) + 360) % 360;
+    renderCompass(heading);
+  }
+
+  var compassBuilt = false;
+  function buildCompass(){
+    var dirs = ["N","30","60","E","120","150","S","210","240","W","300","330"];
+    var strip = document.getElementById("compassStrip");
+    var html = "";
+    // repeat 3x for seamless wrap
+    for(var r = 0; r < 3; r++){
+      for(var i = 0; i < dirs.length; i++){
+        var major = (dirs[i] === "N" || dirs[i] === "E" || dirs[i] === "S" || dirs[i] === "W");
+        html += '<span class="' + (major ? "major" : "") + '">' + dirs[i] + '</span>';
+      }
+    }
+    strip.innerHTML = html;
+    compassBuilt = true;
+  }
+
+  function renderCompass(heading){
+    if(!compassBuilt) buildCompass();
+    var pxPerDeg = 26 / 30;
+    var offset = -heading * pxPerDeg - (12 * 26); // center the middle repeat set
+    document.getElementById("compassStrip").style.transform = "translateX(" + offset + "px)";
+  }
+
+  // ---------- Input ----------
+  var pendingThrottleSet = null; // set by throttle slider / wheel, consumed next frame
+  var throttleDragging = false;
+
+  function setupThrottleSlider(){
+    var slider = document.getElementById("throttleSlider");
+    slider.addEventListener("pointerdown", function(){ throttleDragging = true; });
+    slider.addEventListener("pointerup", function(){ throttleDragging = false; });
+    slider.addEventListener("pointercancel", function(){ throttleDragging = false; });
+    slider.addEventListener("input", function(){
+      pendingThrottleSet = parseFloat(slider.value);
+    });
+  }
+
+  window.addEventListener("keydown", function(e){
+    keys[e.code] = true;
+    if(e.code === "Escape" && state.flightMode) endFlight();
+  });
+  window.addEventListener("keyup", function(e){ keys[e.code] = false; });
+
+  window.addEventListener("wheel", function(e){
+    if(!state.flightMode) return;
+    e.preventDefault();
+    var delta = -e.deltaY;
+    var next = (pendingThrottleSet !== null ? pendingThrottleSet : state.speed) + delta * 0.6;
+    pendingThrottleSet = Math.min(MAX_SPEED, Math.max(0, next));
+  }, { passive: false });
+
+  var isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+  var touchState = { dx:0, dy:0, rollLeft:false, rollRight:false, thrUp:false, thrDown:false, brake:false };
+
+  function setupTouch(){
+    var pad = document.getElementById("lookPad");
+    var active = false, lastX = 0, lastY = 0;
+    pad.addEventListener("touchstart", function(e){
+      active = true;
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+    }, {passive:true});
+    pad.addEventListener("touchmove", function(e){
+      if(!active) return;
+      var t = e.touches[0];
+      touchState.dx += (t.clientX - lastX);
+      touchState.dy += (t.clientY - lastY);
+      lastX = t.clientX; lastY = t.clientY;
+    }, {passive:true});
+    pad.addEventListener("touchend", function(){ active = false; }, {passive:true});
+
+    function bindHold(id, key){
+      var el = document.getElementById(id);
+      el.addEventListener("touchstart", function(e){ e.preventDefault(); touchState[key] = true; });
+      el.addEventListener("touchend", function(e){ e.preventDefault(); touchState[key] = false; });
+      el.addEventListener("touchcancel", function(){ touchState[key] = false; });
+    }
+    bindHold("rollLeftBtn", "rollLeft");
+    bindHold("rollRightBtn", "rollRight");
+    bindHold("thrUpBtn", "thrUp");
+    bindHold("thrDownBtn", "thrDown");
+    bindHold("brakeBtn", "brake");
+  }
+
+  // ---------- UI wiring ----------
+  function buildLocGrid(){
+    var grid = document.getElementById("locGrid");
+    LOCATIONS.forEach(function(loc, idx){
+      var b = document.createElement("div");
+      b.className = "locBtn" + (idx === 0 ? " selected" : "");
+      b.textContent = loc.name;
+      b.addEventListener("click", function(){
+        document.querySelectorAll(".locBtn").forEach(function(x){ x.classList.remove("selected"); });
+        b.classList.add("selected");
+        state.selectedLoc = loc;
+        lookAtLocation(loc, false);
+      });
+      grid.appendChild(b);
+    });
+  }
+
+  function doSearch(){
+    var q = document.getElementById("searchInput").value.trim();
+    if(!q) return;
+    var resultsEl = document.getElementById("searchResults");
+    resultsEl.innerHTML = '<div style="font-size:11px;color:var(--text-dim);">検索中...</div>';
+    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=5&q=" + encodeURIComponent(q))
+      .then(function(r){ return r.json(); })
+      .then(function(list){
+        resultsEl.innerHTML = "";
+        if(!list.length){
+          resultsEl.innerHTML = '<div style="font-size:11px;color:var(--text-dim);">見つかりませんでした</div>';
+          return;
+        }
+        list.forEach(function(item){
+          var d = document.createElement("div");
+          d.className = "searchItem";
+          d.textContent = item.display_name;
+          d.addEventListener("click", function(){
+            var loc = { name: item.display_name.split(",")[0], lon: parseFloat(item.lon), lat: parseFloat(item.lat), alt: 0 };
+            state.selectedLoc = loc;
+            lookAtLocation(loc, false);
+            resultsEl.innerHTML = "";
+            document.getElementById("searchInput").value = loc.name;
+          });
+          resultsEl.appendChild(d);
+        });
+      })
+      .catch(function(){
+        resultsEl.innerHTML = '<div style="font-size:11px;color:var(--accent2);">検索に失敗しました</div>';
+      });
+  }
+
+  function initUI(){
+    buildLocGrid();
+
+    document.getElementById("searchBtn").addEventListener("click", doSearch);
+    document.getElementById("searchInput").addEventListener("keydown", function(e){
+      if(e.key === "Enter") doSearch();
+    });
+
+    var googleToggle = document.getElementById("googleToggle");
+    var googleKeyInput = document.getElementById("googleKeyInput");
+    var googleHelp = document.getElementById("googleHelp");
+    var savedKey = localStorage.getItem(GOOGLE_KEY_STORAGE) || "";
+    if(savedKey) googleKeyInput.value = savedKey;
+
+    googleToggle.addEventListener("change", function(){
+      if(googleToggle.checked){
+        googleKeyInput.classList.add("show");
+        googleHelp.classList.add("show");
+        var key = googleKeyInput.value.trim();
+        if(key){
+          localStorage.setItem(GOOGLE_KEY_STORAGE, key);
+          enableGoogleTiles(key);
+        } else {
+          setGoogleStatus("APIキーを入力してください", "err");
+        }
+      } else {
+        googleKeyInput.classList.remove("show");
+        googleHelp.classList.remove("show");
+        disableGoogleTiles();
+      }
+    });
+    googleKeyInput.addEventListener("change", function(){
+      var key = googleKeyInput.value.trim();
+      if(key){
+        localStorage.setItem(GOOGLE_KEY_STORAGE, key);
+        if(googleToggle.checked) enableGoogleTiles(key);
+      }
+    });
+
+    document.getElementById("takeoffBtn").addEventListener("click", startFlight);
+    document.getElementById("landBtn").addEventListener("click", endFlight);
+
+    document.getElementById("showHelpBtn").addEventListener("click", function(){
+      document.getElementById("helpModal").classList.add("show");
+    });
+    document.getElementById("helpCloseBtn").addEventListener("click", function(){
+      document.getElementById("helpModal").classList.remove("show");
+    });
+
+    if(isTouch) setupTouch();
+    setupThrottleSlider();
+  }
+
+  function showFatalError(err){
+    document.getElementById("fatalErrorMsg").textContent = (err && (err.message || err)) || "unknown error";
+    document.getElementById("fatalError").classList.add("show");
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    if(location.protocol === "file:"){
+      document.getElementById("fileWarning").classList.add("show");
+    }
+    initUI();
+    try{
+      initViewer();
+    }catch(err){
+      console.error(err);
+      showFatalError(err);
+    }
+  });
+
+  window.addEventListener("error", function(e){
+    if(!viewer) showFatalError(e.error || e.message);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#05070d">
+<title>どこでもコプター | ブラウザで大空を飛び回る3Dフライト体験</title>
+<meta name="description" content="ブラウザだけで3D地球儀を操縦して大空を飛び回れる無料アプリ。世界中の名所へワンタップ移動、Googleフォトリアル3Dにも対応。">
+<link rel="icon" href="app/favicon-32.png" sizes="32x32">
+<style>
+  :root{
+    --bg:#0f1115;
+    --panel:#171a21;
+    --panel2:#1e222b;
+    --border:#262b35;
+    --text:#e5e7eb;
+    --text-dim:#9aa1ac;
+    --accent:#3fd0ff;
+    --accent2:#38bdf8;
+    --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
+    line-height:1.7;}
+  a{color:inherit;}
+  img{max-width:100%;display:block;}
+
+  .wrap{max-width:900px;margin:0 auto;padding:0 20px;}
+
+  header.site-header{padding:16px 0;border-bottom:1px solid var(--border);}
+  header.site-header .wrap{display:flex;align-items:center;gap:10px;}
+  header.site-header .logo{width:32px;height:32px;border-radius:8px;}
+  header.site-header .name{font-weight:800;font-size:16px;}
+
+  .hero{padding:52px 0 44px;text-align:center;}
+  .hero .badge{display:inline-block;background:var(--panel2);border:1px solid var(--border);
+    color:var(--accent2);font-size:12px;padding:5px 14px;border-radius:999px;margin-bottom:18px;}
+  .hero h1{font-size:clamp(26px,5vw,40px);margin:0 0 14px;font-weight:800;line-height:1.35;}
+  .hero h1 .accent{color:var(--accent);}
+  .hero p.lead{font-size:15px;color:var(--text-dim);max-width:580px;margin:0 auto 30px;}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:15px 30px;border-radius:14px;
+    font-weight:800;font-size:15px;text-decoration:none;transition:.15s;}
+  .btn-primary{background:var(--accent);color:#001622;}
+  .btn-primary:hover{opacity:.9;}
+  .btn-secondary{background:transparent;border:1px solid var(--border);color:var(--text);margin-left:10px;}
+
+  section{padding:50px 0;}
+  section.alt{background:var(--panel);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+  h2.section-title{font-size:22px;font-weight:800;text-align:center;margin:0 0 8px;}
+  p.section-sub{text-align:center;color:var(--text-dim);font-size:14px;margin:0 0 34px;}
+
+  .feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;}
+  .feature-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:22px;}
+  section.alt .feature-card{background:var(--bg);}
+  .feature-card .ic{font-size:26px;margin-bottom:10px;}
+  .feature-card h3{font-size:15px;margin:0 0 6px;}
+  .feature-card p{font-size:13px;color:var(--text-dim);margin:0;}
+  .feature-card a.more{display:inline-block;margin-top:10px;font-size:12px;color:var(--accent);text-decoration:none;}
+
+  .preview-wrap{display:flex;justify-content:center;}
+  .phone-mock{width:280px;background:#0f1115;color:#e5e7eb;border:8px solid #000;border-radius:36px;overflow:hidden;
+    box-shadow:0 20px 50px rgba(0,0,0,.5);}
+  .phone-screen{display:flex;flex-direction:column;}
+  .mock-sky{height:150px;background:linear-gradient(180deg,#2b6cb0 0%,#7fc4e8 55%,#dff3e3 100%);position:relative;}
+  .mock-sky::before{content:"";position:absolute;left:0;right:0;bottom:0;height:40%;
+    background:linear-gradient(180deg, transparent, #6ba24955);}
+  .mock-sky::after{content:"🚁";position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);font-size:22px;}
+  .mock-hud{display:flex;justify-content:space-between;padding:8px 10px;font-size:9px;color:#9aa1ac;
+    background:#171a21;border-bottom:1px solid #262b35;}
+  .mock-hud b{color:#e5e7eb;display:block;font-size:11px;}
+  .mock-throttle{position:absolute;right:10px;top:14px;bottom:14px;width:4px;background:#263145;border-radius:4px;}
+  .mock-throttle::after{content:"";position:absolute;left:-6px;bottom:35%;width:16px;height:16px;border-radius:50%;
+    background:#3fd0ff;border:2px solid #001622;}
+  .mock-actions{display:flex;gap:6px;padding:8px 10px 12px;background:#171a21;}
+  .mock-btn{flex:1;background:#3fd0ff;color:#001622;font-size:10px;font-weight:800;text-align:center;
+    padding:9px 4px;border-radius:9px;}
+  .mock-btn.sec{background:#1e222b;color:#e5e7eb;border:1px solid #262b35;}
+
+  ol.steps{max-width:520px;margin:0 auto;padding:0;list-style:none;counter-reset:step;}
+  ol.steps li{counter-increment:step;display:flex;gap:14px;margin-bottom:18px;}
+  ol.steps li::before{content:counter(step);flex-shrink:0;width:30px;height:30px;border-radius:50%;
+    background:var(--accent);color:#001622;font-weight:800;font-size:14px;
+    display:flex;align-items:center;justify-content:center;}
+  ol.steps li .txt{font-size:14px;padding-top:4px;}
+  ol.steps li .txt b{display:block;margin-bottom:2px;}
+  ol.steps li .txt span{color:var(--text-dim);font-size:13px;}
+  ol.steps li .txt a{color:var(--accent2);}
+  ol.steps li .txt code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px;}
+
+  .cost-box{max-width:560px;margin:0 auto;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius);padding:18px 22px;font-size:13px;color:var(--text-dim);}
+  .cost-box b{color:var(--text);}
+
+  .cta-final{text-align:center;padding:60px 0;}
+  .cta-final h2{font-size:24px;margin-bottom:10px;}
+  .cta-final p{color:var(--text-dim);font-size:14px;margin-bottom:24px;}
+
+  footer{padding:26px 0 50px;text-align:center;color:var(--text-dim);font-size:12px;border-top:1px solid var(--border);}
+  footer p{margin:4px 0;}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <img class="logo" src="app/icon-192.png" alt="">
+    <span class="name">どこでもコプター</span>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <span class="badge">個人開発・無料で公開・登録不要</span>
+    <h1>ブラウザだけで、<br><span class="accent">3D地球儀を飛び回る</span></h1>
+    <p class="lead">3D地球儀を自分のコプターで自由に操縦できるフライト体験アプリです。世界の名所へワンタップで移動し、テイクオフしたらそのまま大空を飛び回れます。インストール不要、ブラウザですぐに遊べます。</p>
+    <a class="btn btn-primary" href="./app/index.html">🚁 アプリを起動する</a>
+    <a class="btn btn-secondary" href="#features">できることを見る</a>
+  </div>
+</section>
+
+<section id="features" class="alt">
+  <div class="wrap">
+    <h2 class="section-title">できること</h2>
+    <p class="section-sub">選んで、飛んで、操る</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="ic">🌍</div>
+        <h3>世界の名所へワンタップ</h3>
+        <p>富士山・エベレスト・グランドキャニオンなど9つのプリセット地点や、地名検索で行き先を選んでテイクオフできます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="ic">🎮</div>
+        <h3>直感的な操縦</h3>
+        <p>WASDと矢印キーに加えて、右のスライダーやマウスホイールでも速度を直接調整できます。スマホはドラッグとボタンで操作可能です。</p>
+      </div>
+      <div class="feature-card">
+        <div class="ic">🌀</div>
+        <h3>速度に連動する旋回</h3>
+        <p>低速ではゆったりと、高速ではダイナミックに旋回できるので、操縦のメリハリを自然に感じられます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="ic">🏙️</div>
+        <h3>Googleフォトリアル3D(任意)</h3>
+        <p>Google Maps PlatformのAPIキーを設定すると、実写のような3D地形・建物の上を飛行できます。キー無しでも無料の地図でそのまま遊べます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="ic">🎵</div>
+        <h3>BGM付きの没入感</h3>
+        <p>飛行中はBGMが流れ、速度に合わせて音量とテンポが変化します。</p>
+      </div>
+      <div class="feature-card">
+        <div class="ic">💾</div>
+        <h3>データは端末内に保存</h3>
+        <p>Googleフォトリアル3D用のAPIキーは、お使いのブラウザ内(localStorage)にのみ保存されます。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="preview">
+  <div class="wrap">
+    <h2 class="section-title">画面イメージ</h2>
+    <p class="section-sub">実際のアプリのデザインを再現したイメージです</p>
+    <div class="preview-wrap">
+      <div class="phone-mock">
+        <div class="phone-screen">
+          <div class="mock-hud"><span>高度<br><b>1,600 m</b></span><span>速度<br><b>720 km/h</b></span><span>場所<br><b>富士山</b></span></div>
+          <div class="mock-sky"><div class="mock-throttle"></div></div>
+          <div class="mock-actions">
+            <div class="mock-btn">✈️ テイクオフ</div>
+            <div class="mock-btn sec">🛬 着陸</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2 class="section-title">使い方</h2>
+    <p class="section-sub">Googleフォトリアル3Dを使わなければ、登録不要ですぐ遊べます</p>
+    <ol class="steps">
+      <li><div class="txt"><b>「アプリを起動する」を押す</b><span>インストール不要、ブラウザですぐ開けます。</span></div></li>
+      <li><div class="txt"><b>行き先を選ぶ</b><span>プリセット地点をタップするか、地名を検索して行き先を決めます。</span></div></li>
+      <li><div class="txt"><b>「テイクオフ」を押す</b><span>離陸前は地球儀をドラッグして自由に見渡せます。</span></div></li>
+      <li><div class="txt"><b>WASD・矢印キー・スライダーで操縦</b><span>スマホの場合は画面ドラッグとボタンで操作します。</span></div></li>
+      <li><div class="txt"><b>(任意)Googleフォトリアル3Dを使う</b><span>実写のような3D地形で飛びたい場合のみ、下の「APIキーの取得方法」を参考にキーを発行して貼り付けてください。</span></div></li>
+    </ol>
+  </div>
+</section>
+
+<section id="api-setup">
+  <div class="wrap">
+    <h2 class="section-title">Google Maps APIキーの取得方法(任意)</h2>
+    <p class="section-sub">無料枠の範囲内なら、個人の利用では基本的に課金は発生しません</p>
+    <ol class="steps">
+      <li><div class="txt"><b>Google Cloud Console でプロジェクトを作成</b><span><a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a> にアクセスし、Googleアカウントでログインして新しいプロジェクトを作成します。</span></div></li>
+      <li><div class="txt"><b>Map Tiles API を有効化する</b><span>「APIとサービス」→「ライブラリ」で <code>Map Tiles API</code> を検索し、「有効にする」を押します。</span></div></li>
+      <li><div class="txt"><b>請求先アカウントを登録する</b><span>初回はクレジットカード等の登録が必要です。無料枠の範囲内であれば、個人利用では通常課金は発生しません。</span></div></li>
+      <li><div class="txt"><b>APIキーを発行する</b><span>「APIとサービス」→「認証情報」→「認証情報を作成」→「APIキー」を選択してキーを発行します。</span></div></li>
+      <li><div class="txt"><b>(推奨)キーを制限する</b><span>発行したキーの編集画面で、API制限を <code>Map Tiles API</code> のみに絞ると安全です。</span></div></li>
+      <li><div class="txt"><b>アプリに貼り付ける</b><span>アプリ起動画面の「Google フォトリアル3D」をONにし、表示された入力欄にキーを貼り付けてください。</span></div></li>
+    </ol>
+    <div class="cost-box">
+      <b>料金の目安:</b> 毎月一定額までの無料枠が用意されています。最新の料金・無料枠は<a href="https://mapsplatform.google.com/pricing/" target="_blank" rel="noopener">Google Maps Platform公式ページ</a>でご確認ください。
+    </div>
+  </div>
+</section>
+
+<section class="cta-final">
+  <div class="wrap">
+    <h2>さあ、テイクオフしよう</h2>
+    <p>登録不要・完全無料(Googleフォトリアル3Dを使う場合のみAPIキーが必要です)。</p>
+    <a class="btn btn-primary" href="./app/index.html">🚁 アプリを起動する</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Googleフォトリアル3D用のAPIキーは、お使いの端末のブラウザ内にのみ保存されます。</p>
+    <p>地図表示には OpenStreetMap、任意でGoogle Maps Platformのデータを利用しています。</p>
+  </div>
+</footer>
+
+</body>
+</html>

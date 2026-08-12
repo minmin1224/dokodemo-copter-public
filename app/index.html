@@ -47,6 +47,8 @@
   #compassStrip span.major{color:var(--accent);font-weight:700;}
   #compassCenterMark{position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--accent2);}
   #landBtn{position:absolute;top:56px;right:14px;pointer-events:auto;}
+  #recenterBtn{position:absolute;top:56px;left:50%;transform:translateX(-50%);pointer-events:auto;display:none;}
+  #recenterBtn.show{display:block;}
 
   #throttlePanel{position:absolute;right:14px;top:50%;transform:translateY(-50%);
     display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:auto;}
@@ -99,6 +101,9 @@
   #googleStatus{font-size:11px;color:var(--text-dim);margin-top:6px;min-height:14px;}
   #googleStatus.err{color:var(--accent2);}
   #googleStatus.ok{color:var(--good);}
+  #tiltStatus{font-size:11px;color:var(--text-dim);margin-top:6px;min-height:14px;}
+  #tiltStatus.err{color:var(--accent2);}
+  #tiltStatus.ok{color:var(--good);}
   #googleHelp{font-size:11px;color:var(--text-dim);margin-top:4px;line-height:1.6;display:none;}
   #googleHelp.show{display:block;}
   #googleHelp a{color:var(--accent);}
@@ -182,6 +187,7 @@
       <div id="compassStrip"></div>
     </div>
     <button class="btn" id="landBtn">🛬 着陸</button>
+    <button class="btn" id="recenterBtn">🎯 基準リセット</button>
     <div id="throttlePanel">
       <div id="throttleLabel">スロットル</div>
       <div id="throttleSliderWrap">
@@ -231,6 +237,15 @@
       キーが無い場合は無料の OpenStreetMap 地図でそのまま飛行できます。
     </div>
 
+    <div id="tiltSection" style="display:none;">
+      <div class="section-label">操作</div>
+      <div class="toggleRow">
+        <div style="font-size:13px;">チルト操作(ジャイロ)<br><span style="font-size:11px;color:var(--text-dim);">スマホを傾けて視点・旋回を操作</span></div>
+        <label class="switch"><input type="checkbox" id="tiltToggle"><span class="slider"></span></label>
+      </div>
+      <div id="tiltStatus"></div>
+    </div>
+
     <button id="takeoffBtn">✈️ テイクオフ</button>
     <div id="helpToggleRow"><button id="showHelpBtn">操作方法を見る</button></div>
   </div>
@@ -248,6 +263,8 @@
       <div class="keyRow"><span>ブレーキ</span><span><kbd>Space</kbd></span></div>
       <div class="keyRow"><span>着陸(操縦終了)</span><span><kbd>Esc</kbd></span></div>
       <div class="keyRow"><span>スマホ: 画面をドラッグ</span><span>視点操作</span></div>
+      <div class="keyRow"><span>スマホ: チルト操作(要ON)</span><span>傾けて視点・旋回</span></div>
+      <div class="keyRow"><span>チルトの基準リセット</span><span>🎯ボタン(飛行中に表示)</span></div>
       <div class="keyRow" style="border-bottom:none;"><span>離陸前はマウスでドラッグ操作すると<br>Google Earthのように地球儀を見渡せます</span><span></span></div>
       <button class="btn" id="helpCloseBtn">閉じる</button>
     </div>
@@ -291,6 +308,9 @@
   var TURN_MUL_MAX = 3.0;     // fastest turning, near top speed
   var MIN_ALT = 25;           // m above ellipsoid, safety floor
   var TAKEOFF_ALT = 1600;     // m above target point
+
+  var TILT_MAX_DEG = 30;      // tilt-from-center (deg) that maps to full look/turn rate
+  var TILT_DEADZONE_DEG = 3;  // ignore tiny tilts near center to avoid jitter
 
   var viewer, googleTileset = null;
   var keys = {};
@@ -411,6 +431,7 @@
     document.getElementById("hud").classList.add("active");
     document.getElementById("locVal").textContent = state.selectedLoc.name;
     if(isTouch) document.getElementById("touchControls").classList.add("active");
+    if(tiltEnabled) startTilt();
   }
 
   function endFlight(){
@@ -419,6 +440,7 @@
     viewer.scene.screenSpaceCameraController.enableInputs = true;
     document.getElementById("startPanel").style.display = "";
     document.getElementById("hud").classList.remove("active");
+    if(tiltActive) stopTilt();
     document.getElementById("touchControls").classList.remove("active");
     stopAudio();
   }
@@ -470,6 +492,28 @@
     }
     if(touchState.rollLeft) cam.twistLeft(rollAmt);
     if(touchState.rollRight) cam.twistRight(rollAmt);
+
+    // tilt (gyroscope): phone tilt offset from calibrated center drives pitch + turning
+    if(tiltActive && tiltCalibrated){
+      var t = compensatedTilt();
+      var dForward = t.forward - tiltCenter.forward;
+      var dSide = t.side - tiltCenter.side;
+      dForward = Math.abs(dForward) < TILT_DEADZONE_DEG ? 0 : dForward - Math.sign(dForward) * TILT_DEADZONE_DEG;
+      dSide = Math.abs(dSide) < TILT_DEADZONE_DEG ? 0 : dSide - Math.sign(dSide) * TILT_DEADZONE_DEG;
+      var pitchRatio = Math.min(1, Math.max(-1, dForward / TILT_MAX_DEG));
+      var turnRatio = Math.min(1, Math.max(-1, dSide / TILT_MAX_DEG));
+
+      if(pitchRatio > 0) cam.lookDown(lookAmt * pitchRatio);
+      else if(pitchRatio < 0) cam.lookUp(lookAmt * -pitchRatio);
+
+      if(turnRatio > 0){
+        cam.lookRight(lookAmt * turnRatio);
+        cam.twistRight(rollAmt * turnRatio * 0.6);
+      } else if(turnRatio < 0){
+        cam.lookLeft(lookAmt * -turnRatio);
+        cam.twistLeft(rollAmt * -turnRatio * 0.6);
+      }
+    }
 
     cam.moveForward(state.speed * dt);
 
@@ -554,6 +598,90 @@
 
   var isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
   var touchState = { dx:0, dy:0, rollLeft:false, rollRight:false, thrUp:false, thrDown:false, brake:false };
+
+  // ---------- Tilt (gyroscope) control ----------
+  var tiltEnabled = false;  // user's toggle preference
+  var tiltActive = false;   // actually receiving orientation events right now
+  var tiltRaw = { beta: 0, gamma: 0 };
+  var tiltCenter = { forward: 0, side: 0 };
+  var tiltCalibrated = false;
+
+  function getScreenAngle(){
+    if(screen.orientation && typeof screen.orientation.angle === "number") return screen.orientation.angle;
+    if(typeof window.orientation === "number") return window.orientation;
+    return 0;
+  }
+
+  // Compensates for portrait/landscape holding so "tilt top away from you" always
+  // means forward/pitch-down and "tilt sideways" always means turn, regardless of
+  // how the phone is currently rotated.
+  function compensatedTilt(){
+    var beta = tiltRaw.beta, gamma = tiltRaw.gamma;
+    var angle = getScreenAngle();
+    if(angle === 90) return { forward: -gamma, side: beta };
+    if(angle === -90 || angle === 270) return { forward: gamma, side: -beta };
+    if(angle === 180) return { forward: -beta, side: -gamma };
+    return { forward: beta, side: gamma };
+  }
+
+  function onDeviceOrientation(e){
+    if(e.beta === null || e.gamma === null || e.beta === undefined || e.gamma === undefined) return;
+    tiltRaw.beta = e.beta;
+    tiltRaw.gamma = e.gamma;
+    if(!tiltCalibrated){
+      var t = compensatedTilt();
+      tiltCenter.forward = t.forward;
+      tiltCenter.side = t.side;
+      tiltCalibrated = true;
+    }
+  }
+
+  function recenterTilt(){
+    var t = compensatedTilt();
+    tiltCenter.forward = t.forward;
+    tiltCenter.side = t.side;
+  }
+
+  function setTiltStatus(msg, cls){
+    var el = document.getElementById("tiltStatus");
+    el.textContent = msg || "";
+    el.className = cls || "";
+  }
+
+  function attachTiltListener(){
+    tiltCalibrated = false;
+    window.addEventListener("deviceorientation", onDeviceOrientation);
+    tiltActive = true;
+    document.getElementById("recenterBtn").classList.add("show");
+  }
+
+  function startTilt(){
+    if(typeof DeviceOrientationEvent === "undefined"){
+      setTiltStatus("この端末はジャイロセンサーに対応していません", "err");
+      return;
+    }
+    if(typeof DeviceOrientationEvent.requestPermission === "function"){
+      DeviceOrientationEvent.requestPermission().then(function(result){
+        if(result === "granted"){
+          attachTiltListener();
+          setTiltStatus("チルト操作 有効", "ok");
+        } else {
+          setTiltStatus("ジャイロの使用が許可されませんでした", "err");
+        }
+      }).catch(function(){
+        setTiltStatus("ジャイロを利用できませんでした", "err");
+      });
+    } else {
+      attachTiltListener();
+      setTiltStatus("チルト操作 有効", "ok");
+    }
+  }
+
+  function stopTilt(){
+    window.removeEventListener("deviceorientation", onDeviceOrientation);
+    tiltActive = false;
+    document.getElementById("recenterBtn").classList.remove("show");
+  }
 
   function setupTouch(){
     var pad = document.getElementById("lookPad");
@@ -682,7 +810,15 @@
       document.getElementById("helpModal").classList.remove("show");
     });
 
-    if(isTouch) setupTouch();
+    if(isTouch){
+      setupTouch();
+      document.getElementById("tiltSection").style.display = "";
+      document.getElementById("tiltToggle").addEventListener("change", function(e){
+        tiltEnabled = e.target.checked;
+        setTiltStatus("", "");
+      });
+      document.getElementById("recenterBtn").addEventListener("click", recenterTilt);
+    }
     setupThrottleSlider();
   }
 

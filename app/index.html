@@ -249,6 +249,10 @@
         <div style="font-size:13px;">チルト操作(ジャイロ)<br><span style="font-size:11px;color:var(--text-dim);">スマホを傾けて視点・旋回を操作</span></div>
         <label class="switch"><input type="checkbox" id="tiltToggle"><span class="slider"></span></label>
       </div>
+      <div class="toggleRow">
+        <div style="font-size:13px;">オートレベル(フライトサポート)<br><span style="font-size:11px;color:var(--text-dim);">スマホを水平に戻すと機体も自動で水平に戻ります</span></div>
+        <label class="switch"><input type="checkbox" id="autoLevelToggle" checked><span class="slider"></span></label>
+      </div>
       <div id="tiltStatus"></div>
     </div>
 
@@ -271,6 +275,7 @@
       <div class="keyRow"><span>スマホ: 画面をドラッグ</span><span>視点操作</span></div>
       <div class="keyRow"><span>スマホ: チルト操作(要ON)</span><span>傾けて視点・旋回</span></div>
       <div class="keyRow"><span>チルトの基準リセット</span><span>🎯ボタン(飛行中に表示)</span></div>
+      <div class="keyRow"><span>オートレベル(要ON)</span><span>傾きを戻すと自動で水平に</span></div>
       <div class="keyRow" style="border-bottom:none;"><span>離陸前はマウスでドラッグ操作すると<br>Google Earthのように地球儀を見渡せます</span><span></span></div>
       <button class="btn" id="helpCloseBtn">閉じる</button>
     </div>
@@ -315,8 +320,9 @@
   var MIN_ALT = 25;           // m above ellipsoid, safety floor
   var TAKEOFF_ALT = 1600;     // m above target point
 
-  var TILT_MAX_DEG = 30;      // tilt-from-center (deg) that maps to full look/turn rate
-  var TILT_DEADZONE_DEG = 3;  // ignore tiny tilts near center to avoid jitter
+  var TILT_MAX_DEG = 40;      // tilt-from-center (deg) that maps to full look/turn rate
+  var TILT_DEADZONE_DEG = 4;  // ignore tiny tilts near center to avoid jitter
+  var AUTO_LEVEL_RATE = 0.6;  // rad/s - how fast pitch/roll self-correct back to level when auto-level is on
 
   var viewer, googleTileset = null;
   var keys = {};
@@ -519,6 +525,23 @@
         cam.lookLeft(lookAmt * -turnRatio);
         cam.twistLeft(rollAmt * -turnRatio * 0.6);
       }
+
+      // flight support: when the phone is back near center, ease pitch/roll back to level
+      // instead of holding whatever attitude was last commanded
+      if(autoLevelEnabled){
+        var levelStep = AUTO_LEVEL_RATE * dt;
+        if(turnRatio === 0){
+          var roll = cam.roll;
+          if(roll > Math.PI) roll -= 2 * Math.PI; // normalize to -PI..PI
+          if(roll > 0.01) cam.twistLeft(Math.min(roll, levelStep));
+          else if(roll < -0.01) cam.twistRight(Math.min(-roll, levelStep));
+        }
+        if(pitchRatio === 0){
+          var pitch = cam.pitch;
+          if(pitch > 0.01) cam.lookDown(Math.min(pitch, levelStep));
+          else if(pitch < -0.01) cam.lookUp(Math.min(-pitch, levelStep));
+        }
+      }
     }
 
     cam.moveForward(state.speed * dt);
@@ -607,6 +630,7 @@
 
   // ---------- Tilt (gyroscope) control ----------
   var tiltEnabled = false;  // user's toggle preference
+  var autoLevelEnabled = true; // self-correct pitch/roll back to level when tilt is near-centered
   var tiltActive = false;   // actually receiving orientation events right now
   var tiltRaw = { beta: 0, gamma: 0 };
   var tiltCenter = { forward: 0, side: 0 };
@@ -822,6 +846,9 @@
       document.getElementById("tiltToggle").addEventListener("change", function(e){
         tiltEnabled = e.target.checked;
         setTiltStatus("", "");
+      });
+      document.getElementById("autoLevelToggle").addEventListener("change", function(e){
+        autoLevelEnabled = e.target.checked;
       });
       document.getElementById("recenterBtn").addEventListener("click", recenterTilt);
     }

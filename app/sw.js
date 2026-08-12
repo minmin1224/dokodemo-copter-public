@@ -1,4 +1,4 @@
-const CACHE_NAME = "dokodemo-copter-cache-v1";
+const CACHE_NAME = "dokodemo-copter-cache-v2";
 const ASSETS = [
   "./",
   "./index.html",

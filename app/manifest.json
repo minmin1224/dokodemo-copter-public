@@ -1,0 +1,15 @@
+{
+  "name": "どこでもコプター",
+  "short_name": "どこでもコプター",
+  "description": "ブラウザだけで3D地球儀を操縦して大空を飛び回れるフライト体験アプリ",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#05070d",
+  "theme_color": "#05070d",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

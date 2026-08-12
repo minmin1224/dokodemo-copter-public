@@ -58,6 +58,7 @@
   .feature-card h3{font-size:15px;margin:0 0 6px;}
   .feature-card p{font-size:13px;color:var(--text-dim);margin:0;}
   .feature-card a.more{display:inline-block;margin-top:10px;font-size:12px;color:var(--accent);text-decoration:none;}
+  .feature-card a.feature-link{display:inline-block;margin-top:10px;font-size:12px;color:var(--accent);text-decoration:none;}
 
   .preview-wrap{display:flex;justify-content:center;}
   .phone-mock{width:280px;background:#0f1115;color:#e5e7eb;border:8px solid #000;border-radius:36px;overflow:hidden;
@@ -92,6 +93,12 @@
   .cost-box{max-width:560px;margin:0 auto;background:var(--panel);border:1px solid var(--border);
     border-radius:var(--radius);padding:18px 22px;font-size:13px;color:var(--text-dim);}
   .cost-box b{color:var(--text);}
+
+  #install .install-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;max-width:680px;margin:0 auto;}
+  #install .install-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:20px;}
+  #install .install-card h3{margin-top:0;font-size:15px;}
+  #install .install-card ol{padding-left:20px;font-size:13px;color:var(--text-dim);margin:0;}
+  #install .install-card ol li{margin-bottom:6px;}
 
   .cta-final{text-align:center;padding:60px 0;}
   .cta-final h2{font-size:24px;margin-bottom:10px;}
@@ -160,6 +167,12 @@
         <h3>データは端末内に保存</h3>
         <p>Googleフォトリアル3D用のAPIキーは、お使いのブラウザ内(localStorage)にのみ保存されます。</p>
       </div>
+      <div class="feature-card">
+        <div class="ic">📱</div>
+        <h3>ホーム画面に追加(PWA)</h3>
+        <p>スマホのホーム画面に追加すれば、アイコンをタップするだけでアプリのように起動できます。</p>
+        <a class="feature-link" href="#install">追加のやり方を見る →</a>
+      </div>
     </div>
   </div>
 </section>
@@ -194,6 +207,33 @@
       <li><div class="txt"><b>WASD・矢印キー・スライダーで操縦</b><span>スマホの場合は画面ドラッグとボタンで操作します。</span></div></li>
       <li><div class="txt"><b>(任意)Googleフォトリアル3Dを使う</b><span>実写のような3D地形で飛びたい場合のみ、下の「APIキーの取得方法」を参考にキーを発行して貼り付けてください。</span></div></li>
     </ol>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2 class="section-title">ホーム画面への追加方法</h2>
+    <p class="section-sub">アイコンをタップするだけでアプリのように起動できます</p>
+    <div class="install-grid">
+      <div class="install-card">
+        <h3>📱 Android(Chrome)</h3>
+        <ol>
+          <li>Chromeでこのアプリのページを開く</li>
+          <li>右上の「⋮」メニューをタップ</li>
+          <li>「アプリをインストール」または「ホーム画面に追加」をタップ</li>
+          <li>表示名を確認して「インストール」</li>
+        </ol>
+      </div>
+      <div class="install-card">
+        <h3>🍎 iPhone(Safari)</h3>
+        <ol>
+          <li>Safariでこのアプリのページを開く(他のブラウザ不可)</li>
+          <li>下部の共有アイコン(四角に上矢印)をタップ</li>
+          <li>「ホーム画面に追加」を選択</li>
+          <li>表示名を確認して右上の「追加」をタップ</li>
+        </ol>
+      </div>
+    </div>
   </div>
 </section>
 

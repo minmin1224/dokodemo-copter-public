@@ -156,6 +156,14 @@
   #fatalErrorBox pre{white-space:pre-wrap;word-break:break-all;background:#000000aa;border-radius:8px;padding:8px;
     margin-top:8px;font-size:11px;color:#ffb0b0;max-height:160px;overflow-y:auto;}
 
+  #gameOverOverlay{position:absolute;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+    flex-direction:column;gap:10px;background:#1a0000cc;backdrop-filter:blur(4px);pointer-events:none;}
+  #gameOverOverlay.show{display:flex;pointer-events:auto;animation:gameOverFade .25s ease-out;}
+  #gameOverTitle{font-size:clamp(32px,10vw,72px);font-weight:800;letter-spacing:4px;color:var(--accent2);
+    text-shadow:0 0 24px #ff5f6dcc,0 2px 4px #000;}
+  #gameOverSub{font-size:13px;color:var(--text-dim);}
+  @keyframes gameOverFade{from{opacity:0;}to{opacity:1;}}
+
   @media (max-height:480px){
     #throttlePanel{top:auto;bottom:100px;transform:none;gap:4px;}
     #throttleSliderWrap{height:100px;}
@@ -167,6 +175,10 @@
 <body>
   <div id="cesiumContainer"></div>
   <div id="flashOverlay"></div>
+  <div id="gameOverOverlay">
+    <div id="gameOverTitle">GAME OVER</div>
+    <div id="gameOverSub">墜落しました… 3秒後にタイトルへ戻ります</div>
+  </div>
   <div id="fileWarning">
     ⚠️ <b>このファイルを直接ダブルクリックで開いています。</b>
     ブラウザのセキュリティ制限により地図が正しく表示されない場合があります。
@@ -302,11 +314,15 @@
   var state = {
     selectedLoc: LOCATIONS[0],
     flightMode: false,
+    crashed: false,
     speed: 0,
     boost: false,
     googleEnabled: false,
     lastTime: null
   };
+
+  var CRASH_SPEED = 40;         // m/s - ground impact speed above which it's a fatal crash
+  var GAME_OVER_MS = 3000;      // ms - how long GAME OVER stays up before returning to title
 
   var MAX_SPEED = 2200;       // m/s
   var ACCEL = 55;             // m/s^2
@@ -448,10 +464,12 @@
 
   function endFlight(){
     state.flightMode = false;
+    state.crashed = false;
     state.speed = 0;
     viewer.scene.screenSpaceCameraController.enableInputs = true;
     document.getElementById("startPanel").style.display = "";
     document.getElementById("hud").classList.remove("active");
+    document.getElementById("gameOverOverlay").classList.remove("show");
     if(tiltActive) stopTilt();
     document.getElementById("touchControls").classList.remove("active");
     stopAudio();
@@ -463,8 +481,16 @@
     setTimeout(function(){ el.style.opacity = "0"; }, 90);
   }
 
+  function triggerGameOver(){
+    state.crashed = true;
+    stopAudio();
+    document.getElementById("gameOverOverlay").classList.add("show");
+    setTimeout(endFlight, GAME_OVER_MS);
+  }
+
   function onPostRender(){
     if(!state.flightMode) return;
+    if(state.crashed) return; // frozen: GAME OVER sequence is playing out
     var now = performance.now();
     if(state.lastTime === null) state.lastTime = now;
     var dt = Math.min((now - state.lastTime) / 1000, 0.1);
@@ -551,7 +577,11 @@
     if(carto.height < MIN_ALT){
       var fixed = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, MIN_ALT);
       cam.position = fixed;
-      if(state.speed > 40) flashCrash();
+      if(state.speed > CRASH_SPEED){
+        flashCrash();
+        triggerGameOver();
+        return;
+      }
       state.speed *= 0.35;
     }
 
@@ -613,7 +643,7 @@
 
   window.addEventListener("keydown", function(e){
     keys[e.code] = true;
-    if(e.code === "Escape" && state.flightMode) endFlight();
+    if(e.code === "Escape" && state.flightMode && !state.crashed) endFlight();
   });
   window.addEventListener("keyup", function(e){ keys[e.code] = false; });
 
